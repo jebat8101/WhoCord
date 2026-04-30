@@ -6,6 +6,7 @@ import time
 from urllib.parse import urlparse
 from collections import Counter
 from .utils import http_session, tool_available, REQUEST_DELAY, CACHE_DIR
+from . import utils
 from .config import (
     ENABLE_REVERSE_IMG, ENABLE_EXIF, ENABLE_WHOIS, ENABLE_WAYBACK,
     ENABLE_LOCATION, ENABLE_LANGDETECT
@@ -138,7 +139,8 @@ def socialscan_filter(urls):
     cmd = ["socialscan", username, "--json", outfile]
     if utils.DEBUG_MODE:
         utils.debug_subprocess(cmd, timeout=60)
-        # debug mode: skip parsing
+        # debug mode: skip parsing, return all URLs
+        return urls
     else:
         res = _sp.run(cmd, capture_output=True, text=True, timeout=60)
         if res.returncode != 0 or not os.path.exists(outfile):
@@ -164,19 +166,19 @@ def socialscan_filter(urls):
                         unavailable_platforms.add(platform)
 
         platform_to_domain = {
-        "twitter": "twitter.com",
-        "x": "x.com",
-        "instagram": "instagram.com",
-        "github": "github.com",
-        "gitlab": "gitlab.com",
-        "reddit": "reddit.com",
-        "tumblr": "tumblr.com",
-        "youtube": "youtube.com",
-        "twitch": "twitch.tv",
-        "tiktok": "tiktok.com",
-        "facebook": "facebook.com",
-        "pinterest": "pinterest.com",
-    }  # same as before
+            "twitter": "twitter.com",
+            "x": "x.com",
+            "instagram": "instagram.com",
+            "github": "github.com",
+            "gitlab": "gitlab.com",
+            "reddit": "reddit.com",
+            "tumblr": "tumblr.com",
+            "youtube": "youtube.com",
+            "twitch": "twitch.tv",
+            "tiktok": "tiktok.com",
+            "facebook": "facebook.com",
+            "pinterest": "pinterest.com",
+        }
 
         filtered = []
         for url in urls:
