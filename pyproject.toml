@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discord-osint"
+version = "2.4"
+description = "Universal OSINT identity profiling pipeline with interactive menu"
+readme = "README.md"
+license = "MIT"
+authors = [{name = "Your Name", email = "your@email.com"}]
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "exifread",
+    "openai",
+    "langdetect",
+    "nametrace",
+    "rapidfuzz",
+    "jinja2",
+    "keyring",
+    "socid-extractor",
+    "permutations",
+    "validate-email-address",
+]
+requires-python = ">=3.9"
+
+[project.scripts]
+discord-osint = "discord_osint.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["discord_osint*"]
+exclude = ["reports", "GitFive", "blackbird", "sharetrace", "theHarvester", "investigation_cache"]

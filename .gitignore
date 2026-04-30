@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+investigation_cache/
+config.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+discord_osint.egg-info/
