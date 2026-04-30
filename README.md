@@ -36,7 +36,7 @@ Most OSINT tools stop at finding profiles. WhoCord goes further:
 - Uses **Socid‑Extractor** to mine structured identity data from generic pages.
 
 ### ✉️ Email intelligence
-- Permutes email addresses from discovered names (e.g., `ahmed.waheed@gmail.com`).  
+- Permutes email addresses from discovered names.  
 - Runs each email through:  
   - **Holehe** – checks which sites the email is registered on  
   - **h8mail** – breach/compromise status  
