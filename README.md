@@ -262,6 +262,14 @@ WhoCord orchestrates these fantastic open‑source OSINT projects:
 
 ---
 
+## 🆕 Updates 1.0.1
+
+- **Blackbird integration** – now uses Blackbird for email‑based discovery and 600+ additional username sites.
+- **Email guesser removed**
+- **GHunt login** – GHunt now requires a one‑time `ghunt login` (see installation step 6).
+
+---
+
 ## 🔒 Security & privacy
 
 - **Tokens are never stored in plain text.** They are kept in your OS keyring (Windows Credential Manager, macOS Keychain, or Linux Secret Service / KWallet).  
