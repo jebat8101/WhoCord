@@ -31,4 +31,5 @@ TOOLS_LIST = [
     ("ENABLE_LANGDETECT", "Language detection"),
     ("ENABLE_PARALLEL_EMAIL", "Parallel email checks"),
     ("ENABLE_CACHING", "Cache intel between runs"),
+    ("ENABLE_BLACKBIRD", "Blackbird (email & username search, 600+ sites)"),
 ]
