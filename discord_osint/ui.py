@@ -81,9 +81,13 @@ def start_pipeline(config):
     if mode_choice == "1":
         config.MODE = "manual"
         uname = input("Enter the username to investigate: ").strip()
-        if not uname:
-            print("Username cannot be empty."); return
-        config.MANUAL_USERNAME = uname
+        if uname:
+            config.MANUAL_USERNAME = uname
+        email = input("Enter an email to investigate (optional, press Enter to skip): ").strip()
+        if email:
+            config.MANUAL_EMAIL = email
+        if not uname and not email:
+            print("You must enter at least a username or an email."); return
     elif mode_choice == "2":
         config.MODE = "discord"
         print("\nMulti‑guild search: The script will search all guilds you are a member of")
@@ -97,6 +101,9 @@ def start_pipeline(config):
             config.TARGET_GUILD_ID = guild_id
         except ValueError:
             print("IDs must be integers."); return
+        extras = input("Additional usernames or emails to search (comma‑separated, optional): ").strip()
+        if extras:
+            config.EXTRA_TARGETS = [t.strip() for t in extras.split(",") if t.strip()]
     else:
         print("Invalid choice."); return
 
