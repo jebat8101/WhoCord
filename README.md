@@ -1,4 +1,3 @@
-
 # 🕵️ WhoCord
 
 **Turn any username or Discord ID into a full identity profile.**  
@@ -12,7 +11,7 @@ Most OSINT tools stop at finding profiles. WhoCord goes further:
 
 - **Discord‑native link resolution** – extracts and resolves Instagram, TikTok, Facebook, and Twitter tracking links shared by a target user.  
 - **Full identity pipeline** – names, emails, locations, breach data, GitHub history, and even avatar metadata are pulled together into one structured intelligence snapshot.  
-- **30+ integrated tools** – Sherlock, Maigret, Naminter, Holehe, h8mail, GitFive, GHunt, Scylla, Socialscan, and more, all controlled from a single interface.  
+- **30+ integrated tools** – Sherlock, Maigret, Naminter, Blackbird, Holehe, h8mail, GitFive, GHunt, Scylla, Socialscan, and more, all controlled from a single interface.  
 - **AI‑generated reports** – a LLaMA 3.3 (via Groq) summary that interprets the results for you, ready to read or share.  
 - **Secure token storage** – API keys are stored in your operating system’s encrypted keyring, never in plain text.
 
@@ -26,9 +25,14 @@ Most OSINT tools stop at finding profiles. WhoCord goes further:
 - Resolves those tracking links using ShareTrace to reveal the original sharer’s profile.
 
 ### 🌐 Username discovery
-- Scans **700+ websites** using Sherlock, Maigret, Naminter, and Social‑Analyzer.  
+- Scans **700+ websites** using Sherlock, Maigret, Naminter, Blackbird, and Social‑Analyzer.  
 - Spiders discovered URLs with Sociopath and Linkook to uncover even more related accounts.  
-- Filters false positives with Socialscan before scraping.
+- Filters false positives with Socialscan before scraping.  
+- **Blackbird** now brings 600+ additional sites with email‑based search and avatar extraction.
+
+### ✉️ Manual email input
+- You can optionally provide an email address in manual mode; it will be searched via Blackbird’s email detection and also forwarded to the email intelligence pipeline (Holehe, h8mail, etc.).  
+- No more automatic email guessing – only real, user‑supplied emails are processed, keeping results clean.
 
 ### 📄 Profile scraping
 - Pulls public profile pages (GitHub, Twitter, Reddit, YouTube, etc.) with built‑in scrapers.  
@@ -36,13 +40,12 @@ Most OSINT tools stop at finding profiles. WhoCord goes further:
 - Uses **Socid‑Extractor** to mine structured identity data from generic pages.
 
 ### ✉️ Email intelligence
-- Permutes email addresses from discovered names.  
 - Runs each email through:  
   - **Holehe** – checks which sites the email is registered on  
   - **h8mail** – breach/compromise status  
   - **HIBP** (HaveIBeenPwned) – known data breaches  
   - **Emailrep.io** – reputation and risk score  
-  - **GHunt** – Google account information (requires `ghunt login`)  
+  - **GHunt** – Google account information (requires `ghunt login` once)  
   - **Scylla** – breach database lookup
 
 ### 🐙 GitHub deep dive
@@ -124,20 +127,45 @@ WhoCord calls several standalone OSINT programs that must be available on your s
 pip install sherlock-project maigret holehe h8mail gitfive naminter linkook sociopath
 ```
 
-Optional but powerful extras:
+### 5. Install Blackbird (email & username search on 600+ sites)
+
+Blackbird must be cloned into the project folder and its dependencies installed:
+
+```bash
+git clone https://github.com/p1ngul1n0/blackbird
+cd blackbird
+pip install -r requirements.txt
+cd ..
+```
+
+> **Important:** Blackbird needs a large data file (`wmn-data.json`) that is normally fetched via Git LFS. If you encounter a `FileNotFoundError` for `data/wmn-data.json`, run these commands:
+
+```bash
+cd blackbird
+git lfs install
+git lfs pull
+cd ..
+```
+
+If Git LFS isn’t available, you can also download the file manually from the **WhatsMyName** project:  
+[https://raw.githubusercontent.com/WebBreacher/WhatsMyName/main/wmn-data.json](https://raw.githubusercontent.com/WebBreacher/WhatsMyName/main/wmn-data.json)  
+Place it directly inside `blackbird/data/`.
+
+### 6. Optional but powerful extras
 
 ```bash
 # WHOIS lookups
 sudo apt install whois          # Linux
 brew install whois               # macOS
 
-# GHunt for Google account info (then run `ghunt login`)
+# GHunt for Google account info (requires `ghunt login` after install)
 pip install ghunt
+ghunt login
 ```
 
 When you first launch WhoCord, it will automatically check which tools are missing and tell you exactly how to install them.
 
-### 5. Launch WhoCord
+### 7. Launch WhoCord
 
 ```bash
 discord-osint
@@ -163,13 +191,14 @@ The interactive menu will appear. You’re ready to investigate!
 ==================================================
 ```
 
-- **Option 1** – Enable or disable any of the 32 tools with a single keypress.  
+- **Option 1** – Enable or disable any of the 33 tools with a single keypress.  
 - **Option 2** – Enter your API tokens. They are saved securely in your OS keyring.  
   - Discord token (required for Discord mode)  
   - GitHub token (increases API rate limits)  
   - Groq API key (enables AI report)  
   - Instagram session (optional, reserved for future Toutatis integration)  
 - **Option 3** – Choose `Manual` (investigate a username) or `Discord` (investigate a Discord user ID).  
+  - In **Manual mode**, you can optionally provide an email address to be searched via Blackbird and the email intelligence pipeline.  
 - **Option 4** – Save current configuration to `config.json` (tool toggles and mode preferences) and exit.  
 - **Option 5** – Toggle debug mode. When ON, all subprocess commands are printed live to the console, and a debug log is saved to `investigation_cache/debug_logs/`.
 
@@ -201,6 +230,10 @@ All results are saved in the **`investigation_cache/`** folder inside the projec
 - `report_<target_id>_<timestamp>.md` – AI‑generated markdown report (if Groq is enabled)
 - `report_<target_id>_<timestamp>.html` – interactive HTML report (if `--output html` is used)
 
+Additionally, raw outputs from Blackbird and Socialscan are archived in:
+- `investigation_cache/blackbird_output/`
+- `investigation_cache/socialscan_output/`
+
 ---
 
 ## 🧰 Tools & technologies
@@ -211,6 +244,7 @@ WhoCord orchestrates these fantastic open‑source OSINT projects:
 |------|---------|
 | [Sherlock](https://github.com/sherlock-project/sherlock) | Username search across 400+ sites |
 | [Maigret](https://github.com/soxoj/maigret) | Full‑spectrum username search with metadata |
+| [Blackbird](https://github.com/p1ngul1n0/blackbird) | Email & username search on 600+ sites with avatar extraction |
 | [Holehe](https://github.com/megadose/holehe) | Checks which sites an email is registered on |
 | [h8mail](https://github.com/khast3x/h8mail) | Email breach & compromise checker |
 | [GitFive](https://github.com/mxrch/gitfive) | GitHub user intelligence |
@@ -263,3 +297,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
