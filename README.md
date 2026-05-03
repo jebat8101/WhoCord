@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="WhoCord" width="400">
+</p>
+
 # 🕵️‍♂️ WhoCord
 
 **Turn any username or Discord ID into a full identity profile.**
@@ -144,6 +148,10 @@ python3 web_app.py
 ```
 Then open `http://127.0.0.1:5000`.  
 Or use the one‑click launcher: `./run.sh` (starts server + opens browser, no terminal visible).
+
+<p align="center">
+  <img src="dashboard.png" alt="WhoCord Dashboard" width="700">
+</p>
 
 ---
 
