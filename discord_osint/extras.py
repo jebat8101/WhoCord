@@ -197,4 +197,5 @@ def socialscan_filter(urls):
                 print(f"    Skipping {url} (socialscan says not available)")
             else:
                 filtered.append(url)
-        return filtered
+        # Never return an empty list; fall back to the original URLs
+        return filtered if filtered else urls
