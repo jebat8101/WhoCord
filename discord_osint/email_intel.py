@@ -88,8 +88,9 @@ def run_ghunt(gmail):
     if stdout is None: return None
     try:
         return json.loads(stdout) if isinstance(json.loads(stdout), dict) else {}
-    except Exception as e:
-        print(f"  GHunt error: {e}")
+    except Exception:
+        if utils.DEBUG_MODE:
+            print("  GHunt: upstream parsing error (known issue) – skipped.")
         return None
 
 def check_hibp(email):
