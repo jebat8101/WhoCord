@@ -95,6 +95,8 @@ def run_osint_pipeline(config=None):
     avatar_urls = set()
     clean_user = clean_username(username)
     manual_email = getattr(config, 'MANUAL_EMAIL', '').strip()
+    if not manual_email:
+        manual_email = os.environ.get('MANUAL_EMAIL', '').strip()
 
     if config.ENABLE_CACHING:
         previous = intel_core.load_latest_state()
@@ -243,12 +245,26 @@ def run_osint_pipeline(config=None):
 
         bb_output_dir = os.path.join(CACHE_DIR, "blackbird_output")
         os.makedirs(bb_output_dir, exist_ok=True)
-        for fname in os.listdir(config.BLACKBIRD_DIR):
-            if fname.endswith("_blackbird.json"):
-                src = os.path.join(config.BLACKBIRD_DIR, fname)
-                dst = os.path.join(bb_output_dir, fname)
-                shutil.copy2(src, dst)
-                intel_core.add_intel("raw_tool_output", f"blackbird_{fname}", dst, source="blackbird")
+        # Walk the whole Blackbird directory to catch results/* subdirs
+        for root, dirs, files in os.walk(config.BLACKBIRD_DIR):
+            for fname in files:
+                if fname.endswith("_blackbird.json"):
+                    src = os.path.join(root, fname)
+                    dst = os.path.join(bb_output_dir, fname)
+                    shutil.copy2(src, dst)
+                    intel_core.add_intel("raw_tool_output", f"blackbird_{fname}", dst, source="blackbird")
+
+        # Immediately persist every discovered URL so later processing can't wipe them
+        for item in discovery:
+            url = item.get("url", "")
+            if url:
+                site = item.get("site", "unknown")
+                intel_core.add_intel(
+                    "social_profiles",
+                    f"discovery_{site}_{url[:60]}",
+                    url,
+                    source="discovery"
+                )
 
         if mode == "discord":
             print("\n-- Searching messages for links (across all visible guilds) --")
@@ -285,7 +301,20 @@ def run_osint_pipeline(config=None):
                         dst = os.path.join(scan_output_dir, sf)
                         shutil.copy2(src, dst)
                         intel_core.add_intel("raw_tool_output", f"socialscan_{sf}", dst, source="socialscan")
-        scrape_tasks = []; generic_urls = []; seen = set()
+        scrape_tasks = []
+        generic_urls = []
+        seen = set()
+        for url in all_urls:
+            if url in seen:
+                continue
+            seen.add(url)
+            plat, slug = classify_url(url)
+            if plat and slug and plat not in ("facebook","instagram","tiktok","pinterest","snapchat","linkedin"):
+                # Known platform, will use platform-specific scraper
+                scrape_tasks.append((plat, slug))
+            elif is_likely_profile_url_v2(url):
+                # Generic profile URL (e.g. Kick, Letterboxd)
+                generic_urls.append(url)
 
         print(f"\nEnriching {len(scrape_tasks)} known & {len(generic_urls)} generic profiles...")
         scraped = []
