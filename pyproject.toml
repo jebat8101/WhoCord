@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "discord-osint"
-version = "2.4"
-description = "Universal OSINT identity profiling pipeline with interactive menu"
+version = "1.0.2"
+description = "Universal OSINT identity profiling pipeline – CLI, interactive menu, and web dashboard"
 readme = "README.md"
 license = "MIT"
-authors = [{name = "Your Name", email = "your@email.com"}]
+authors = [{name = "Siv-nick", email = "your@email.com"}]
 dependencies = [
     "requests",
     "beautifulsoup4",
-    "exifread",
+    "ExifRead",
     "openai",
     "langdetect",
     "nametrace",
@@ -22,6 +22,8 @@ dependencies = [
     "socid-extractor",
     "permutations",
     "validate-email-address",
+    "flask",
+    "werkzeug",
 ]
 requires-python = ">=3.9"
 
