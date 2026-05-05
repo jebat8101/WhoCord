@@ -262,6 +262,8 @@ WhoCord orchestrates these fantastic open‑source OSINT projects:
 
 ## 🔄 Updates
 
+1.0.3: currently working on it to make the installation as easy as extracting a zip file
+
 ### 1.0.2
 * **Web dashboard** – run investigations from your browser with live streaming.
 * **Enhanced AI report** – now includes relationship analysis and critical points of attention.
