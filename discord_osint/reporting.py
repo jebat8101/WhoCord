@@ -77,6 +77,55 @@ def run_name_analysis(name_list):
     return res
 
 # -------------------------------------------------------------------
+#  AI Persona Summary (NEW)
+# -------------------------------------------------------------------
+def generate_persona_summary(intel, groq_api_key):
+    """Ask LLM to summarise the subject's online persona based on bios."""
+    if not groq_api_key:
+        return None
+    try:
+        from openai import OpenAI
+        client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_api_key)
+
+        bios = []
+        for k, v in intel.get("social_profiles", {}).items():
+            if "bio" in k.lower() or "desc" in k.lower():
+                val = v.get("value", "")
+                if val:
+                    bios.append(val[:500])
+
+        # Also try to extract bio text from socid_raw data
+        for k, v in intel.get("social_profiles", {}).items():
+            if "socid_raw" in k:
+                try:
+                    socid_data = json.loads(v.get("value", "{}"))
+                    if isinstance(socid_data, dict) and socid_data.get("bio"):
+                        bios.append(socid_data["bio"][:500])
+                except Exception:
+                    pass
+
+        if not bios:
+            return "Insufficient profile texts to form a persona."
+
+        prompt = (
+            "You are an experienced OSINT investigator. Based on the following collected profile biographies, "
+            "write a single concise paragraph describing the person's interests, profession, online behaviour, "
+            "and any notable characteristics. Use clear, factual language.\n\nProfile texts:\n" +
+            "\n---\n".join(bios[:15])
+        )
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"  Persona summary error: {e}")
+        return None
+
+# -------------------------------------------------------------------
 #  AI report generation (fully guarded)
 # -------------------------------------------------------------------
 def generate_ai_report(core, groq_api_key):
@@ -200,40 +249,21 @@ def _format_breach_data(raw_breaches):
         })
     return cleaned
 
-def _load_blackbird_results(intel):
-    """
-    Recursively load all Blackbird JSON files from
-    investigation_cache/blackbird_output and the Blackbird installation directory.
-    """
+def _load_blackbird_results():
+    """Load only Blackbird JSON files from the current investigation cache."""
+    bb_dir = os.path.join(CACHE_DIR, "blackbird_output")
+    if not os.path.isdir(bb_dir):
+        return []
     results = []
-    seen_files = set()
-
-    # List of directories to search
-    dirs_to_search = []
-
-    # 1) The cache output folder
-    bb_cache_dir = os.path.join(CACHE_DIR, "blackbird_output")
-    if os.path.isdir(bb_cache_dir):
-        dirs_to_search.append(bb_cache_dir)
-
-    # 2) The Blackbird installation directory (as fallback)
-    from .config import BLACKBIRD_DIR
-    if os.path.isdir(BLACKBIRD_DIR) and os.path.abspath(BLACKBIRD_DIR) not in [os.path.abspath(d) for d in dirs_to_search]:
-        dirs_to_search.append(BLACKBIRD_DIR)
-
-    # Walk each directory recursively
-    for search_dir in dirs_to_search:
-        for root, dirs, files in os.walk(search_dir):
-            for fname in sorted(files):
-                if fname.endswith("_blackbird.json") and fname not in seen_files:
-                    fpath = os.path.join(root, fname)
-                    try:
-                        with open(fpath, "r") as f:
-                            data = json.load(f)
-                        results.append({"filename": fname, "entries": data})
-                        seen_files.add(fname)
-                    except:
-                        pass
+    for fname in sorted(os.listdir(bb_dir)):
+        if fname.endswith("_blackbird.json"):
+            fpath = os.path.join(bb_dir, fname)
+            try:
+                with open(fpath, 'r') as f:
+                    data = json.load(f)
+                results.append({"filename": fname, "entries": data})
+            except:
+                pass
     return results
 
 def generate_html_report(intel_core, target_id):
@@ -253,13 +283,17 @@ def generate_html_report(intel_core, target_id):
 
     # --- Discord info (only show what exists) ---
     discord_info = intel.get("discord", {})
-    # Build a clean dict for the template, leaving out empty values
     discord_clean = {
         "username": discord_info.get("username", {}).get("value", None),
         "account_created": discord_info.get("account_created", {}).get("value", None),
         "bio": discord_info.get("bio", {}).get("value", None),
         "avatar_cdn": discord_info.get("avatar_cdn", {}).get("value", None),
     }
+
+    # Build enrichment lookup by URL (Sociopath, etc.)
+    enrichment_lookup = {}
+    for k, v in intel.get("social_enrichment", {}).items():
+        enrichment_lookup[k] = v.get("value", {})
 
     # --- Social profiles (unchanged but we keep the nice site names) ---
     social_profiles = []
@@ -275,7 +309,15 @@ def generate_html_report(intel_core, target_id):
                 site = raw.replace("_", " ")
             if not site:
                 site = "Unknown"
-            social_profiles.append({"site": site, "url": val})
+            # Get enrichment data for this URL (if any)
+            enrich = enrichment_lookup.get(val, {})
+            social_profiles.append({
+                "site": site,
+                "url": val,
+                "display_name": enrich.get("display_name", ""),
+                "bio": enrich.get("bio", ""),
+                "email": enrich.get("email", ""),
+            })
 
     # --- Enrichment (socid data from scraped profiles) ---
     enrichment = []
@@ -309,8 +351,11 @@ def generate_html_report(intel_core, target_id):
         if isinstance(data, dict) and "value" in data:
             wayback_clean[url] = data["value"]
 
-    # --- Blackbird data (load from cache) ---
-    blackbird_data = _load_blackbird_results(intel)
+    # --- Blackbird data (only fresh scan) ---
+    blackbird_data = _load_blackbird_results()
+
+    # --- Persona summary from AI (new) ---
+    persona_summary = intel.get("persona_summary", {}).get("persona", {}).get("value", "")
 
     html = template.render(
         target_id=target_id,
@@ -328,11 +373,12 @@ def generate_html_report(intel_core, target_id):
         wayback=wayback_clean,
         blackbird=blackbird_data,
         enrichment=enrichment,
+        persona_summary=persona_summary,
     )
     return html
 
 def _create_default_template(path):
-    """Comprehensive dark‑themed report template – WhoCord v1.0.2"""
+    """Comprehensive dark‑themed report template – WhoCord v1.0.3"""
     template_content = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -393,7 +439,13 @@ def _create_default_template(path):
     <strong>Generated:</strong> {{ timestamp }}
   </div>
 
-  <!-- all sections remain exactly the same as before -->
+  {% if persona_summary %}
+  <section>
+    <h2>🧑 Persona Summary (AI)</h2>
+    <p>{{ persona_summary }}</p>
+  </section>
+  {% endif %}
+
   {% if discord_info and (discord_info.username or discord_info.account_created or discord_info.bio or discord_info.avatar_cdn) %}
   <section>
     <h2>📱 Discord Identity</h2>
@@ -410,12 +462,15 @@ def _create_default_template(path):
   <section>
     <h2>🌐 Discovered Social Profiles</h2>
     <div class="grid">
-      {% for p in social_profiles %}
-      <div class="card">
-        <h3>{{ p.site }}</h3>
-        <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
-      </div>
-      {% endfor %}
+  {% for p in social_profiles %}
+  <div class="card">
+    <h3>{{ p.site }}</h3>
+    <a href="{{ p.url }}" target="_blank">{{ p.url }}</a>
+    {% if p.display_name %}<p style="margin-top:0.3em;"><strong>Name:</strong> {{ p.display_name }}</p>{% endif %}
+    {% if p.bio %}<p style="margin-top:0.3em;">{{ p.bio }}</p>{% endif %}
+    {% if p.email %}<p style="margin-top:0.3em;"><strong>Email:</strong> {{ p.email }}</p>{% endif %}
+  </div>
+  {% endfor %}
     </div>
   </section>
   {% endif %}
@@ -562,30 +617,23 @@ def _create_default_template(path):
 
   {% if blackbird %}
   <section>
-    <h2>🐦 Blackbird Search Results</h2>
+    <h2>🐦 Blackbird Search Results (fresh scan)</h2>
     {% for file in blackbird %}
-    <div class="card" style="margin-bottom:1em;">
-      <h3>{{ file.filename }}</h3>
-      {% if file.entries %}
-        <ul>
-        {% for entry in file.entries %}
-          <li>
-            <strong>{{ entry.get("name", "?") }}</strong> – 
-            <a href="{{ entry.get('url', '#') }}" target="_blank">{{ entry.get("url", '') }}</a>
-            {% if entry.get("metadata") %}
-              {% for meta in entry.metadata %}
-                {% if meta.type == 'Image' and meta.value %}
-                  <img src="{{ meta.value }}" alt="avatar" class="avatar-thumb">
-                {% endif %}
-              {% endfor %}
-            {% endif %}
-          </li>
-        {% endfor %}
-        </ul>
-      {% else %}
-        <p>No entries found.</p>
-      {% endif %}
-    </div>
+      <details style="margin-bottom:0.5em;">
+        <summary>{{ file.filename }}</summary>
+        {% if file.entries %}
+          <ul>
+          {% for entry in file.entries %}
+            <li style="margin-bottom:0.5em;">
+              <strong>{{ entry.get("name", "?") }}</strong> – 
+              <a href="{{ entry.get('url', '#') }}" target="_blank">{{ entry.get("url", '') }}</a>
+            </li>
+          {% endfor %}
+          </ul>
+        {% else %}
+          <p>No entries found.</p>
+        {% endif %}
+      </details>
     {% endfor %}
   </section>
   {% endif %}
@@ -601,7 +649,7 @@ def _create_default_template(path):
   </section>
   {% endif %}
 
-  <div class="footer">🔎 Generated by WhoCord v1.0.2 – Universal OSINT Pipeline</div>
+  <div class="footer">🔎 Generated by WhoCord v1.0.3 – Universal OSINT Pipeline</div>
 </div>
 </body>
 </html>"""
