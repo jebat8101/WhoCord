@@ -16,9 +16,7 @@ WhoCord automatically scans Discord messages across mutual guilds for tracking l
 
 ---
 
-## ⚡ What makes WhoCord different?
-
-Most OSINT tools stop at finding profiles. WhoCord goes further:
+## ⚡ Features
 
 * **Discord‑native link resolution** – extracts and resolves Instagram, TikTok, Facebook, and Twitter tracking links shared by a target user.
 * **Full identity pipeline** – names, emails, locations, breach data, GitHub history, and even avatar metadata are pulled together into one structured intelligence snapshot.
