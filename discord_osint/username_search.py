@@ -31,8 +31,7 @@ def _normalize_naminter_results(data):
 def run_naminter(raw_username):
     if not tool_available("naminter"): return []
     user = clean_username(raw_username)
-    cmd = ["naminter", "-u", user, "--json", "--filter-exists"]
-    res, _, _ = utils.debug_subprocess(cmd, timeout=300)
+    res, _, _ = utils.run_external_tool("naminter", "-u", user, "--json", "--filter-exists", timeout=300)
     results_files = sorted(glob.glob("results_*.json"), key=os.path.getmtime, reverse=True)
     for rf in results_files:
         try:
@@ -50,8 +49,7 @@ def run_sherlock(raw_username):
     if not tool_available("sherlock") or not ENABLE_SHERLOCK:
         return []
     user = clean_username(raw_username)
-    cmd = ["sherlock", user, "--print-found", "--no-color", "--timeout", "10"]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=300)
+    _, stdout, _ = utils.run_external_tool("sherlock", user, "--print-found", "--no-color", "--timeout", "10", timeout=300)
     if stdout is None:
         return []
     results = []
@@ -101,7 +99,7 @@ def run_sociopath(seed_url, recursive=0):
     if not ENABLE_SOCIOPATH:
         return []
     # Use the current Python to run sociopath as a module – ensures venv is used
-    cmd = [sys.executable, "-m", "sociopath", seed_url, "--json", "-r", str(recursive)]
+    cmd = ["sociopath", seed_url, "--json", "-r", str(recursive)]
     _, stdout, _ = utils.debug_subprocess(cmd, timeout=60)
     # ... rest of function stays identical
     if stdout is None:
@@ -151,8 +149,7 @@ def run_sociopath(seed_url, recursive=0):
 def run_linkook(username):
     if not tool_available("linkook"):
         return []
-    cmd = ["linkook", username]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=60)
+    _, stdout, _ = utils.run_external_tool("linkook", username, timeout=60)
     if stdout is None:
         return []
     urls = []
@@ -175,8 +172,7 @@ def run_linkook(username):
 @resilient_task(max_retries=1)
 def run_maigret(username):
     if not tool_available("maigret"): return []
-    cmd = ["maigret", username, "--all-sites", "--json", "simple", "--timeout", "15"]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=600)
+    _, stdout, _ = utils.run_external_tool("maigret", username, "--all-sites", "--json", "simple", "--timeout", "15", timeout=600)
     if stdout is None: return []
     try:
         data = json.loads(stdout)
@@ -234,15 +230,33 @@ def run_blackbird(target, mode="username"):
     # Record time BEFORE running so we can find files created after this
     t0 = time.time()
 
+    # Use the bundled Python executable + script path
+    python_exe = utils._get_frozen_python() if getattr(sys, 'frozen', False) else sys.executable
     if mode == "email":
-        cmd = [sys.executable, blackbird_py, "--email", target, "--json",
-               "--no-update", "--no-nsfw", "--timeout", "15"]
+        args = ["--email", target]
     else:
-        cmd = [sys.executable, blackbird_py, "--username", target, "--json",
-               "--no-update", "--no-nsfw", "--timeout", "15"]
+        args = ["--username", target]
+    cmd = [python_exe, blackbird_py] + args + ["--json", "--no-update", "--no-nsfw", "--timeout", "15"]
 
-    # Run from the Blackbird directory so it finds its data files
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=600, cwd=BLACKBIRD_DIR)
+    import sys as _sys_bb
+    if getattr(_sys_bb, 'frozen', False):
+        env = os.environ.copy()
+        bundle_dir = os.path.dirname(_sys_bb.executable)
+        env['PYTHONHOME'] = bundle_dir
+        paths = []
+        internal = os.path.join(bundle_dir, '_internal')
+        if os.path.isdir(internal):
+            paths.append(internal)
+        ext = os.path.join(bundle_dir, 'ext_lib')
+        if os.path.isdir(ext):
+            paths.append(ext)
+        if paths:
+            existing = env.get('PYTHONPATH', '')
+            env['PYTHONPATH'] = os.pathsep.join(paths) + (os.pathsep + existing if existing else '')
+    else:
+        env = None
+
+    _, stdout, _ = utils.debug_subprocess(cmd, timeout=600, cwd=BLACKBIRD_DIR, env=env)
 
     # Give the filesystem a moment to finish writing
     time.sleep(1)
