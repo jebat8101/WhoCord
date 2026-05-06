@@ -2,7 +2,11 @@
 
 All notable changes to WhoCord will be documented in this file.
 
-## [1.0.3] – 2026-05-04
+## [1.0.3] – 2026-05-06 first portable release
+
+* **Self‑contained zip**: no installation required – just extract and run on any modern 64‑bit Linux system.
+* All external tools (Sherlock, Maigret, Naminter, Blackbird, etc.) bundled with their dependencies.
+* Web dashboard now included in the portable package.
 
 ### Added
 - **Rotating debug logs** – structured, timestamped log files with automatic rotation (10 MB, 5 backups) for easier investigation auditing.
