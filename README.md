@@ -1,3 +1,9 @@
+[![GitHub release](https://img.shields.io/github/v/release/Siv-nick/WhoCord)](https://github.com/Siv-nick/WhoCord/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Siv-nick/WhoCord)](https://github.com/Siv-nick/WhoCord/stargazers)
+[![Portable](https://img.shields.io/badge/distribution-portable_zip-blue)](#)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
 <p align="center">
   <img src="logo.png" alt="WhoCord" width="400">
 </p>
