@@ -12,6 +12,7 @@ def print_menu(config):
     print("3. Start investigation")
     print("4. Save config and exit")
     print("5. Toggle debug mode")
+    print("6. Upgrade external tools")
     print("="*50)
     show_summary(config)
 
