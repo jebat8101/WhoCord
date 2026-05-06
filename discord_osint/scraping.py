@@ -285,8 +285,7 @@ def is_likely_github_user(slug):
 def run_gitfive(github_username):
     if not ENABLE_GITFIVE:
         return {}
-    cmd = ["gitfive", "user", github_username, "--json"]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=120)
+    _, stdout, _ = utils.run_external_tool("gitfive", "user", github_username, "--json", timeout=120)
     if stdout is None:
         return {}
     try:
