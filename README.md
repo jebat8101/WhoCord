@@ -26,7 +26,7 @@ Most OSINT tools stop at finding profiles. WhoCord goes further:
 
 ## 🚀 Quick Start (recommended)
 
-1. **Download the portable zip** from the [Releases page](https://github.com/Siv-nick/WhoCord/releases) (Linux 64‑bit, ~250 MB).
+1. **Download the portable zip** from the [Releases page](https://github.com/Siv-nick/WhoCord/releases) (Linux 64‑bit, ~500 MB).
 2. **Extract** the archive anywhere:
    ```bash
    unzip WhoCord.zip -d WhoCord
