@@ -37,7 +37,7 @@ from .scraping import (
 )
 from .email_intel import (
     run_holehe, run_h8mail, run_ghunt, run_scylla,
-    check_hibp, check_emailrep
+    check_hibp, check_emailrep, verify_email_smtp_advanced, gravatar_lookup
 )
 from .username_search import (
     run_naminter, run_sherlock, run_social_analyzer,
@@ -51,7 +51,7 @@ from .extras import (
 from .reporting import (
     calculate_identity_confidence, run_name_analysis,
     generate_ai_report, format_ai_report_markdown,
-    generate_html_report
+    generate_html_report, generate_persona_summary
 )
 
 
@@ -136,6 +136,13 @@ def run_osint_pipeline(config=None):
     else:
         intel_core.add_intel("discord","username",username,source="manual_input")
 
+    # Clean old Blackbird cache before new run
+    import shutil as sh
+    bb_cache = os.path.join(CACHE_DIR, "blackbird_output")
+    if os.path.exists(bb_cache):
+        sh.rmtree(bb_cache)
+    os.makedirs(bb_cache, exist_ok=True)
+
     try:
         discovery = []
         if config.ENABLE_NAMINTER:
@@ -195,11 +202,18 @@ def run_osint_pipeline(config=None):
                         intel_core.add_intel("emails",
                                              f"sociopath_{email}", email,
                                              source="sociopath")
+                    # --- Store enrichment attached to the URL ---
+                    enrichment = {}
+                    if display:
+                        enrichment["display_name"] = display
+                    if email:
+                        enrichment["email"] = email
                     desc = sp.get("description", "") or sp.get("Bio", "")
                     if desc:
-                        intel_core.add_intel("social_profiles",
-                                             f"sociopath_desc_{item['url'][:40]}",
-                                             desc[:200], source="sociopath")
+                        enrichment["bio"] = desc[:200]
+                    if enrichment:
+                        intel_core.add_intel("social_enrichment", url,
+                                             enrichment, source="sociopath")
 
         if config.ENABLE_MAIGRET:
             if not tool_available("maigret"):
@@ -220,6 +234,8 @@ def run_osint_pipeline(config=None):
                     location = item.get("location")
                     if location:
                         intel_core.add_intel("identity_clues", f"location_maigret_{item['site']}", location, source="maigret")
+
+        bb_t0 = time.time()
 
         if config.ENABLE_BLACKBIRD:
             print(f"\n-- blackbird on: {clean_user} --")
@@ -245,14 +261,19 @@ def run_osint_pipeline(config=None):
 
         bb_output_dir = os.path.join(CACHE_DIR, "blackbird_output")
         os.makedirs(bb_output_dir, exist_ok=True)
-        # Walk the whole Blackbird directory to catch results/* subdirs
+        # Copy only Blackbird files created after we started this investigation
         for root, dirs, files in os.walk(config.BLACKBIRD_DIR):
             for fname in files:
                 if fname.endswith("_blackbird.json"):
                     src = os.path.join(root, fname)
-                    dst = os.path.join(bb_output_dir, fname)
-                    shutil.copy2(src, dst)
-                    intel_core.add_intel("raw_tool_output", f"blackbird_{fname}", dst, source="blackbird")
+                    try:
+                        mtime = os.path.getmtime(src)
+                        if mtime >= bb_t0:
+                            dst = os.path.join(bb_output_dir, fname)
+                            shutil.copy2(src, dst)
+                            intel_core.add_intel("raw_tool_output", f"blackbird_{fname}", dst, source="blackbird")
+                    except OSError:
+                        pass
 
         # Immediately persist every discovered URL so later processing can't wipe them
         for item in discovery:
@@ -503,6 +524,14 @@ def run_osint_pipeline(config=None):
                 gh = run_ghunt(email)
                 if gh:
                     intel_core.add_intel("ghunt", email, gh, source="ghunt")
+            # New email enrichment
+            if getattr(config, 'ENABLE_EMAIL_VERIFY', False):
+                vrf = verify_email_smtp_advanced(email)
+                if vrf:
+                    intel_core.add_intel("email_verification", f"verify_{email}", vrf, source="smtp_verify")
+            grav_url = gravatar_lookup(email)
+            if grav_url:
+                intel_core.add_intel("social_profiles", f"gravatar_{email}", grav_url, source="gravatar")
 
         print("\n-- Scylla breach DB --")
         for email in all_emails:
@@ -537,6 +566,12 @@ def run_osint_pipeline(config=None):
         # ================================================================
         #                   Report generation
         # ================================================================
+        if config.ENABLE_AI_REPORT and config.GROQ_API_KEY:
+            print("\n-- Generating Persona Summary --")
+            persona = generate_persona_summary(intel_core.intel, config.GROQ_API_KEY)
+            if persona:
+                intel_core.add_intel("persona_summary", "persona", persona, source="ai_persona")
+
         if config.ENABLE_AI_REPORT and config.GROQ_API_KEY:
             print("\n-- Generating AI report --")
             structured = generate_ai_report(intel_core, config.GROQ_API_KEY)
