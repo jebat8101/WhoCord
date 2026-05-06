@@ -3,6 +3,10 @@ import time
 import subprocess as _sp
 import os
 import json
+import dns.resolver
+import smtplib
+import socket
+import hashlib
 from . import utils
 from .utils import resilient_task, tool_available, http_session
 from .config import SMTP_CHECK, ENABLE_HOLEHE, ENABLE_H8MAIL, ENABLE_SCYLLA, ENABLE_GHUNT, ENABLE_EMAILREP, ENABLE_HIBP
@@ -46,8 +50,7 @@ def verify_email_smtp(email):
 @resilient_task(max_retries=2)
 def run_holehe(email):
     if not tool_available("holehe"): return []
-    cmd = ["holehe", email, "--only-used", "--no-color"]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=120)
+    _, stdout, _ = utils.run_external_tool("holehe", email, "--only-used", "--no-color", timeout=120)
     if stdout is None: return []
     sites = []
     for line in stdout.splitlines():
@@ -59,8 +62,7 @@ def run_holehe(email):
 @resilient_task(max_retries=1)
 def run_h8mail(email):
     if not tool_available("h8mail"): return ""
-    cmd = ["h8mail", "-t", email]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=180)
+    _, stdout, _ = utils.run_external_tool("h8mail", "-t", email, timeout=180)
     if stdout is None: return ""
     clean = re.sub(r'\x1b\[[0-9;]*m', '', stdout)
     if "Not Compromised" in clean:
@@ -110,11 +112,89 @@ def check_emailrep(email):
     except: pass
     return {}
 
+import re
+
+def _strip_ansi(text):
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
 def run_scylla(email):
     if not tool_available("scylla") or not ENABLE_SCYLLA:
         return ""
-    cmd = ["scylla", "-e", email]
-    _, stdout, _ = utils.debug_subprocess(cmd, timeout=60)
-    if stdout is None:
+    _, stdout, _ = utils.run_external_tool("scylla", "-l", email, timeout=60)
+    if not stdout:
         return ""
-    return stdout.strip()[:500]
+
+    # Strip ANSI control sequences
+    stdout = _strip_ansi(stdout)
+
+    # Skip all banner lines until we hit a meaningful result line
+    lines = stdout.splitlines()
+    useful_lines = []
+    started = False
+    for line in lines:
+        # Detect the start of the actual result or an error
+        if not started:
+            if (
+                "[*] Searching" in line or
+                "Traceback" in line or
+                "TypeError" in line or
+                "Error" in line or
+                line.strip().startswith("usage:") or
+                line.strip().startswith("scylla.py:")
+            ):
+                started = True
+                useful_lines.append(line)
+                continue
+        else:
+            useful_lines.append(line)
+
+    clean = "\n".join(useful_lines).strip()
+    if not clean:
+        return "Scylla ran but produced no output."
+    return clean[:500]
+
+# ---- New advanced email enrichment functions ----
+def check_mx_record(domain):
+    """Return list of MX hostnames for a domain."""
+    try:
+        answers = dns.resolver.resolve(domain, 'MX')
+        return [str(r.exchange).rstrip('.') for r in answers]
+    except Exception:
+        return []
+
+def verify_email_smtp_advanced(email):
+    """
+    Verify email existence using SMTP RCPT TO.
+    Returns dict with 'valid' (True/False/None) and 'reason'.
+    """
+
+    domain = email.split('@')[1]
+    mx_records = check_mx_record(domain)
+    if not mx_records:
+        return {'valid': False, 'reason': 'No MX record'}
+
+    mx_host = mx_records[0]
+    try:
+        with smtplib.SMTP(mx_host, 25, timeout=10) as smtp:
+            smtp.helo(socket.gethostname())
+            smtp.mail('verify@example.com')
+            code, message = smtp.rcpt(email)
+            if code == 250:
+                return {'valid': True, 'reason': ''}
+            else:
+                return {'valid': False, 'reason': f'SMTP: {code} {message.decode()}'}
+    except Exception as e:
+        return {'valid': None, 'reason': str(e)}
+
+def gravatar_lookup(email):
+    """Return Gravatar image URL if an account exists."""
+    email_hash = hashlib.md5(email.strip().lower().encode()).hexdigest()
+    url = f"https://www.gravatar.com/avatar/{email_hash}?d=404&s=200"
+    try:
+        r = http_session.get(url)
+        if r.status_code == 200 and 'image' in r.headers.get('Content-Type', ''):
+            return url
+    except Exception:
+        pass
+    return None
