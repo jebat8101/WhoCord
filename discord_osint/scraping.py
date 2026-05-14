@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 from . import utils                              # <-- NEEDED for debug
 from .utils import http_session, github_session, resilient_task
 from .config import SKIP_GITHUB, GITHUB_TOKEN, ENABLE_SOCID, ENABLE_GITFIVE
+from .utils.mosint_wrapper import mosint_confirms_link
+from .utils import clean_username   # (if not already imported)
 
 try:
     from bs4 import BeautifulSoup
@@ -161,6 +163,31 @@ def is_valid_personal_email(email: str) -> bool:
     # everything else is considered potentially personal
     return True
 
+def is_email_linked_to_target(email: str, target_username: str) -> bool:
+    """
+    Return True if *email* is plausibly linked to *target_username*.
+    
+    Rule (a): the local‑part contains the username (fast, offline).
+    Rule (b): an external lookup via MOSINT confirms a matching profile
+              (fallback, slower but still free).
+    """
+    if not target_username:
+        return True   # no username to compare → allow
+
+    # --- Rule (a) – local‑part match ---
+    local = email.split("@")[0].lower()
+    # Remove dots and underscores (often used as separators)
+    local_clean = local.replace(".", "").replace("_", "").replace("-", "")
+    clean_uname = clean_username(target_username).lower()
+    if clean_uname in local_clean or local_clean in clean_uname:
+        return True   # ✅ definite link
+
+    # --- Rule (b) – MOSINT confirmation ---
+    if mosint_confirms_link(email, target_username):
+        return True   # ✅ MOSINT found a matching username independently
+
+    return False
+
 # -------------------------------------------------------------------
 #  REST OF THE FILE (unchanged except import and debug in extractor)
 # -------------------------------------------------------------------
@@ -243,31 +270,81 @@ def scrape_profile_info(platform, username):
 
 @resilient_task(max_retries=1)
 def scrape_generic_url(url):
-    info = {"name":"","email":"","bio":"","blog":url,"socid":None,"avatar":None}
+    info = {"name": "", "email": "", "bio": "", "blog": url,
+            "socid": None, "avatar": None}
     try:
         domain = urlparse(url).netloc.lower()
     except:
         return info
-    if any(domain.endswith(d) for d in {"facebook.com", "instagram.com", "tiktok.com", "pinterest.com", "snapchat.com", "linkedin.com"}):
+    if any(domain.endswith(d) for d in {"facebook.com", "instagram.com",
+                                        "tiktok.com", "pinterest.com",
+                                        "snapchat.com", "linkedin.com"}):
         return info
     if not is_likely_profile_url_v2(url):
         return info
-    headers = {"User-Agent":"Mozilla/5.0"}
+
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
         r = http_session.get(url, headers=headers, timeout=10)
-        if r.status_code==200:
-            if ENABLE_SOCID: info["socid"] = run_socid_extractor(r.text)
-            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', r.text)
-            for email in emails:
-                if is_valid_personal_email(email):
-                    info["email"] = email; break
+        if r.status_code != 200:
+            return info
+
+        content_type = r.headers.get("Content-Type", "").lower()
+
+        # --- JSON response (API endpoint) ---
+        if "application/json" in content_type or url.lower().endswith(".json"):
             try:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(r.text, 'html.parser')
-                og_img = soup.find("meta", property="og:image")
-                if og_img: info["avatar"] = og_img.get("content")
-            except: pass
-    except: pass
+                parsed = r.json()
+                if isinstance(parsed, dict):
+                    # Build a socid-like dictionary with human-readable keys
+                    socid_data = {}
+                    # Country / location
+                    for key in ("country", "country_code", "country_group",
+                                "location", "region"):
+                        val = parsed.get(key)
+                        if val is not None:
+                            socid_data[key] = str(val)
+                    # Email registration flags
+                    if "errors" in parsed and isinstance(parsed["errors"], dict):
+                        email_err = parsed["errors"].get("email", "")
+                        if "already registered" in str(email_err):
+                            socid_data["email_status"] = "already registered"
+                    # Minimum age, gender info, etc. (Spotify-like metadata)
+                    for key in ("minimum_age", "is_country_launched"):
+                        val = parsed.get(key)
+                        if val is not None:
+                            socid_data[key] = str(val)
+                    # Any other interesting flat values
+                    for key in ("status", "can_accept_licenses_in_one_step",
+                                "requires_marketing_opt_in", "use_all_genders"):
+                        val = parsed.get(key)
+                        if val is not None:
+                            socid_data[key] = str(val)
+
+                    if socid_data:
+                        info["socid"] = socid_data
+                return info
+            except Exception:
+                return info
+
+        # --- HTML response (traditional profile page) ---
+        if ENABLE_SOCID:
+            info["socid"] = run_socid_extractor(r.text)
+        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', r.text)
+        for email in emails:
+            if is_valid_personal_email(email):
+                info["email"] = email
+                break
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(r.text, 'html.parser')
+            og_img = soup.find("meta", property="og:image")
+            if og_img:
+                info["avatar"] = og_img.get("content")
+        except:
+            pass
+    except:
+        pass
     return info
 
 def is_likely_github_user(slug):
@@ -294,3 +371,4 @@ def run_gitfive(github_username):
     except Exception as e:
         print(f"  GitFive error: {e}")
         return {}
+
