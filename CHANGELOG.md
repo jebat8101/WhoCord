@@ -2,6 +2,29 @@
 
 All notable changes to WhoCord will be documented in this file.
 
+## [1.1.0] – 2026-05-14
+
+### Added
+- Six new investigation modules – Email, Domain, Phone, Image, URL, Data Probe (auto‑detect).
+- Live dashboard with module cards, stage list, pivot confirmation modal, history page.
+- NEW HTML report with collapsible platform cards, avatars, GHunt Google card, phone/URL/domain data.
+- Full‑intel AI narrative and persona summary (LLM now sees emails, breaches, WHOIS, DNS, URL metadata, phone, GHunt).
+- Unified email enrichment – shared `enrich_email` function for manual and email modules.
+- Blackbird API data (Spotify, Twitter, Duolingo) stored as `socid_raw`.
+- theHarvester curated sources – free only (`crtsh,robtex,urlscan,waybackarchive,duckduckgo,threatcrowd`).
+
+### Fixed
+- GHunt Google card not appearing (missing import).
+- Platform names showing as `Blackbird_Email_Https:`.
+- Duplicate discovery runs during pivots.
+- Phone card missing from HTML report.
+- URL module data not displayed.
+- GitHub profiles merged into one card.
+
+### Changed
+- Frontend rebuilt with React + TypeScript (requires `npm run build`).
+- GHunt maps extraction now includes reviews, answers, profile link.
+
 ## [1.0.3] – 2026-05-06 first portable release
 
 * **Self‑contained zip**: no installation required – just extract and run on any modern 64‑bit Linux system.
