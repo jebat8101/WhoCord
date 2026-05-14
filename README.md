@@ -37,9 +37,9 @@ WhoCord is a modular OSINT investigation platform that runs dozens of open‑sou
 
 ---
 
-## 🚀 Quick Start (recommended) outdated version 1.0.3
+## 🚀 Quick Start (recommended)
 
-1. **Download the portable zip** (currentily for version 1.0.3 only) from the [Releases page](https://github.com/Siv-nick/WhoCord/releases) (Linux 64‑bit, ~500 MB).
+1. **Download the portable zip** from the [Releases page](https://github.com/Siv-nick/WhoCord/releases) (Linux 64‑bit, ~500 MB).
 2. **Extract** the archive anywhere:
    ```bash
    unzip WhoCord.zip -d WhoCord
@@ -55,7 +55,8 @@ WhoCord is a modular OSINT investigation platform that runs dozens of open‑sou
 
 ---
 
-## 📦 Installation latest version 1.1
+## 📦 Installation (from source – for developers)
+
 ### 1. Clone the repository
 ```bash
 git clone https://github.com/Siv-nick/WhoCord.git
@@ -115,7 +116,20 @@ ghunt login
 ```
 Follow the instructions to authenticate with your Google account.
 
-### 8. Launch the web dashboard
+### 8. Build the frontend (required for source installations)
+
+The web dashboard requires a compiled React frontend. Make sure you have **Node.js 18+** and **npm** installed, then run:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+This creates the `frontend/dist/` folder that Flask serves automatically.
+
+### 9. Launch the web dashboard
 ```bash
 python web_app.py
 ```
@@ -236,4 +250,3 @@ The author assumes no liability for misuse.
 ## 📄 License
 
 MIT License
-```
