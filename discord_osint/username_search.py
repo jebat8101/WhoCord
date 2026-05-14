@@ -13,7 +13,8 @@ import re
 from datetime import datetime
 from importlib import import_module
 from . import utils
-from .utils import resilient_task, tool_available, clean_username, CACHE_DIR
+from .utils import resilient_task, tool_available, clean_username, CACHE_DIR, get_base_dir
+
 from .config import ENABLE_NAMINTER, ENABLE_SHERLOCK, ENABLE_SOCIAL_ANALYZER, ENABLE_LINKOOK, ENABLE_SOCIOPATH, ENABLE_MAIGRET
 from .scraping import is_likely_profile_url_v2
 
@@ -32,7 +33,7 @@ def run_naminter(raw_username):
     if not tool_available("naminter"): return []
     user = clean_username(raw_username)
     res, _, _ = utils.run_external_tool("naminter", "-u", user, "--json", "--filter-exists", timeout=300)
-    results_files = sorted(glob.glob("results_*.json"), key=os.path.getmtime, reverse=True)
+    results_files = sorted(glob.glob("results*.json"), key=os.path.getmtime, reverse=True)
     for rf in results_files:
         try:
             with open(rf, "r") as f: data = json.load(f)
@@ -98,13 +99,25 @@ def run_social_analyzer(raw_username):
 def run_sociopath(seed_url, recursive=0):
     if not ENABLE_SOCIOPATH:
         return []
-    # Use the current Python to run sociopath as a module – ensures venv is used
+
+    if not tool_available("sociopath"):
+        if not utils.install_package("sociopath"):
+            print("  [X] sociopath could not be installed automatically.")
+            print("      Please install it manually from source:")
+            print("      git clone https://github.com/iojw/sociopath && cd sociopath && pip install .")
+        else:
+            print("  sociopath installed successfully.")
+        # If installation succeeded, the tool is now available
+
+    if not tool_available("sociopath"):
+        return []   # cannot run even after install attempt – stop here
+
+    # Use the current Python to run sociopath as a module
     cmd = ["sociopath", seed_url, "--json", "-r", str(recursive)]
     _, stdout, _ = utils.debug_subprocess(cmd, timeout=60)
     # ... rest of function stays identical
     if stdout is None:
         return []
-
     # Isolate the JSON array (sociopath prints log lines before the JSON)
     json_start = stdout.find('[')
     if json_start == -1:
@@ -169,25 +182,64 @@ def run_linkook(username):
                     urls.append(url2)
     return list(set(urls))
 
+import os
+import json
+
 @resilient_task(max_retries=1)
 def run_maigret(username):
-    if not tool_available("maigret"): return []
-    _, stdout, _ = utils.run_external_tool("maigret", username, "--all-sites", "--json", "simple", "--timeout", "15", timeout=600)
-    if stdout is None: return []
-    try:
-        data = json.loads(stdout)
-    except json.JSONDecodeError:
-        print(f"  maigret returned invalid JSON (first 200 chars): {stdout[:200]}")
+    if not tool_available("maigret"):
         return []
+    # Run maigret – it will save the results to reports/report_<username>_simple.json
+    _, _, _ = utils.run_external_tool(
+        "maigret", username,
+        "--all-sites", "--json", "simple", "--timeout", "15",
+        timeout=600
+    )
+    reports_dir = os.path.join(os.path.dirname(get_base_dir()), "reports")
+    if not os.path.isdir(reports_dir):
+        return []
+    # Find candidate files
+    candidates = []
+    for fn in os.listdir(reports_dir):
+        if fn.startswith(f"report_{username}") and fn.endswith(".json"):
+            candidates.append(os.path.join(reports_dir, fn))
+    if not candidates:
+        # fallback: look for any file containing the username and 'simple'
+        for fn in os.listdir(reports_dir):
+            if username in fn and "simple" in fn and fn.endswith(".json"):
+                candidates.append(os.path.join(reports_dir, fn))
+    if not candidates:
+        return []
+    # Use the most recent file
+    latest = max(candidates, key=os.path.getmtime)
+    try:
+        with open(latest, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"  Maigret JSON read error: {e}")
+        return []
+
     results = []
     for site, info in data.items():
-        if info.get("status") and info["status"].get("exists"):
+        if not isinstance(info, dict):
+            continue
+        status_block = info.get("status", {})
+        # Maigret "simple" JSON stores the actual status as a string,
+        # e.g. "Claimed", "Available", "Unclaimed", "Not found".
+        raw_status = status_block.get("status", "")
+        if str(raw_status).lower() in ("claimed", "available"):
+            # Extended identifiers Maigret may have extracted
+            ids = status_block.get("ids", {})
+
             results.append({
                 "site": site,
                 "url": info.get("url_user", ""),
-                "name": info.get("username", ""),
-                "bio": info.get("bio", ""),
-                "location": info.get("location", "")
+                "name": ids.get("fullname")
+                        or status_block.get("username", ""),
+                "bio": ids.get("bio", ""),
+                "location": ids.get("location", ""),
+                "image": ids.get("image", ""),
+                "full": info   # keep the full Maigret entry for future use
             })
     return results
 
@@ -197,18 +249,40 @@ def run_blackbird(target, mode="username"):
     Run Blackbird on a username or email.
     Blackbird must be cloned into ./blackbird/.
     Returns a list of dicts: [{"site": ..., "url": ...}].
-    
+
     Blackbird's --json flag is a boolean (no filename argument).
     Results are saved to: blackbird/results/<target>_<date>_blackbird/<target>_<date>_blackbird.json
     """
     from .config import ENABLE_BLACKBIRD, BLACKBIRD_DIR
     if not ENABLE_BLACKBIRD:
         return []
+
     blackbird_py = os.path.join(BLACKBIRD_DIR, "blackbird.py")
     if not os.path.isfile(blackbird_py):
-        print(f"  [!] Blackbird not found at {blackbird_py}. Skipping.")
-        print(f"  Clone it: git clone https://github.com/p1ngul1n0/blackbird")
-        return []
+        print("  Blackbird not found – attempting to clone the repository …")
+        try:
+            import subprocess as _clone_sp
+            _clone_sp.check_call(
+                ["git", "clone", "https://github.com/p1ngul1n0/blackbird", BLACKBIRD_DIR],
+                stdout=_clone_sp.DEVNULL, stderr=_clone_sp.DEVNULL
+            )
+            print("  Blackbird cloned successfully.")
+        except Exception:
+            print(f"  [!] Failed to clone Blackbird. Please manually run:")
+            print(f"      git clone https://github.com/p1ngul1n0/blackbird {BLACKBIRD_DIR}")
+            return []
+        # After cloning, verify the script now exists
+        if not os.path.isfile(blackbird_py):
+            print(f"  [!] Cloned, but blackbird.py still not found at {blackbird_py}")
+            return []
+
+    # ---- Ensure python-dotenv is installed (required by Blackbird) ----
+    try:
+        import dotenv
+    except ImportError:
+        print("  Installing python-dotenv for Blackbird …")
+        _sp.check_call([sys.executable, "-m", "pip", "install", "python-dotenv"],
+                       stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
 
     # --- Blackbird data file: auto-download if missing ---
     wmn_data = os.path.join(BLACKBIRD_DIR, "data", "wmn-data.json")
@@ -263,7 +337,7 @@ def run_blackbird(target, mode="username"):
 
     # Blackbird saves JSON to: blackbird/results/<target>_<date>_blackbird/<target>_<date>_blackbird.json
     results_dir = os.path.join(BLACKBIRD_DIR, "results")
-    
+
     # Find the most recently created JSON file matching our target
     best_path = None
     best_mtime = 0
