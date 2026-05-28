@@ -65,8 +65,7 @@ cd WhoCord
 
 ### 2. Create a Python virtual environment
 ```bash
-python3 -m venv venv
-source venv/bin/activate   # Linux / macOS
+python3 -m venv venv && source venv/bin/activate   # Linux / macOS
 ```
 
 ### 3.Install dependencies
