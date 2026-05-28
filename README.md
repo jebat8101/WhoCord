@@ -59,7 +59,7 @@ WhoCord is a modular OSINT investigation platform that runs dozens of open‑sou
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Siv-nick/WhoCord.git
+git clone https://github.com/jebat8101/WhoCord.git
 cd WhoCord
 ```
 
