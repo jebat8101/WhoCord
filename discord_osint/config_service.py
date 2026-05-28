@@ -1,6 +1,7 @@
 import json
 import os
 import keyring
+from keyring.errors import KeyringError
 from .utils import get_base_dir, get_data_dir
 
 CONFIG_FILE = os.path.join(get_base_dir(), "config.json")
@@ -221,7 +222,10 @@ class Config:
             if env_val:
                 self._data[key] = env_val
             else:
-                stored = keyring.get_password(service, key)
+                try:
+                    stored = keyring.get_password(service, key)
+                except KeyringError:
+                    stored = None
                 if stored:
                     self._data[key] = stored
         _sync_globals_from_dict(self._data)
@@ -238,11 +242,14 @@ class Config:
         for key, service in SENSITIVE_KEYS.items():
             value = self._data[key]
             if value:
-                keyring.set_password(service, key, value)
+                try:
+                    keyring.set_password(service, key, value)
+                except KeyringError:
+                    pass
             else:
                 try:
                     keyring.delete_password(service, key)
-                except Exception:
+                except (KeyringError, Exception):
                     pass
         _sync_globals_from_dict(self._data)
 
@@ -274,5 +281,122 @@ class Config:
 
     def to_dict(self):
         return self._data.copy()
+
+
+class ConfigService(Config):
+    """Compatibility wrapper used by the Flask UI."""
+
+    _TOKENS = {
+        "DISCORD_TOKEN",
+        "GITHUB_TOKEN",
+        "GROQ_API_KEY",
+        "INSTAGRAM_SESSION",
+    }
+    _ALIASES = {
+        "mode": "MODE",
+        "multi_guild_search": "MULTI_GUILD_SEARCH",
+        "debug": "DEBUG",
+        "target_user_id": "TARGET_USER_ID",
+        "target_guild_id": "TARGET_GUILD_ID",
+        "manual_username": "MANUAL_USERNAME",
+        "manual_email": "MANUAL_EMAIL",
+    }
+
+    @property
+    def discord_token(self):
+        return self.DISCORD_TOKEN
+
+    @property
+    def github_token(self):
+        return self.GITHUB_TOKEN
+
+    @property
+    def groq_api_key(self):
+        return self.GROQ_API_KEY
+
+    @property
+    def instagram_session(self):
+        return self.INSTAGRAM_SESSION
+
+    @property
+    def mode(self):
+        return self.MODE
+
+    @mode.setter
+    def mode(self, value):
+        object.__setattr__(self, "MODE", value)
+
+    @property
+    def multi_guild_search(self):
+        return bool(self.MULTI_GUILD_SEARCH)
+
+    @multi_guild_search.setter
+    def multi_guild_search(self, value):
+        object.__setattr__(self, "MULTI_GUILD_SEARCH", bool(value))
+
+    @property
+    def debug(self):
+        return bool(self.DEBUG)
+
+    @debug.setter
+    def debug(self, value):
+        object.__setattr__(self, "DEBUG", bool(value))
+
+    @property
+    def target_user_id(self):
+        return self.TARGET_USER_ID
+
+    @target_user_id.setter
+    def target_user_id(self, value):
+        object.__setattr__(self, "TARGET_USER_ID", value)
+
+    @property
+    def target_guild_id(self):
+        return self.TARGET_GUILD_ID
+
+    @target_guild_id.setter
+    def target_guild_id(self, value):
+        object.__setattr__(self, "TARGET_GUILD_ID", value)
+
+    @property
+    def manual_username(self):
+        return self.MANUAL_USERNAME
+
+    @manual_username.setter
+    def manual_username(self, value):
+        object.__setattr__(self, "MANUAL_USERNAME", value)
+
+    @property
+    def manual_email(self):
+        return self.MANUAL_EMAIL
+
+    @manual_email.setter
+    def manual_email(self, value):
+        object.__setattr__(self, "MANUAL_EMAIL", value)
+
+    def __setattr__(self, name, value):
+        alias = self._ALIASES.get(name)
+        if alias:
+            return super().__setattr__(alias, value)
+        return super().__setattr__(name, value)
+
+    def set_sensitive(self, key, value):
+        if key not in self._TOKENS:
+            raise ValueError(f"Unsupported sensitive key: {key}")
+        setattr(self, key, value or "")
+        self.save()
+
+    def set_tool(self, key, enable):
+        if key not in DEFAULT_CONFIG:
+            raise ValueError(f"Unsupported tool key: {key}")
+        setattr(self, key, bool(enable))
+        self.save()
+
+    def tools_list(self):
+        return {
+            key: bool(self._data.get(key))
+            for key in DEFAULT_CONFIG
+            if key.startswith("ENABLE_")
+        }
 
 config = Config()

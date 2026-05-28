@@ -1,6 +1,7 @@
 import json
 import os
 import keyring
+from keyring.errors import KeyringError
 from .utils import get_base_dir, get_data_dir
 
 CONFIG_FILE = os.path.join(get_base_dir(), "config.json")
@@ -221,7 +222,10 @@ class Config:
             if env_val:
                 self._data[key] = env_val
             else:
-                stored = keyring.get_password(service, key)
+                try:
+                    stored = keyring.get_password(service, key)
+                except KeyringError:
+                    stored = None
                 if stored:
                     self._data[key] = stored
         _sync_globals_from_dict(self._data)
@@ -238,11 +242,14 @@ class Config:
         for key, service in SENSITIVE_KEYS.items():
             value = self._data[key]
             if value:
-                keyring.set_password(service, key, value)
+                try:
+                    keyring.set_password(service, key, value)
+                except KeyringError:
+                    pass
             else:
                 try:
                     keyring.delete_password(service, key)
-                except Exception:
+                except (KeyringError, Exception):
                     pass
         _sync_globals_from_dict(self._data)
 

@@ -15,7 +15,6 @@ dependencies = [
     "ExifRead",
     "openai",
     "langdetect",
-    "nametrace",
     "rapidfuzz",
     "jinja2",
     "keyring",
@@ -32,8 +31,6 @@ dependencies = [
     "pillow",
     "imagehash",
     "pytesseract",   # optional – OCR
-    # Additional network utilities
-    "dns.resolver",  # part of dnspython
 ]
 requires-python = ">=3.9"
 
