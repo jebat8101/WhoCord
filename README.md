@@ -69,12 +69,17 @@ python3 -m venv venv
 source venv/bin/activate   # Linux / macOS
 ```
 
-### 3. Install WhoCord and its Python dependencies
+### 3.Install dependencies
+Use the pinned file (recommended):
+```bash
+pip install -r requirements.txt
+```
+### 4. Install WhoCord and its Python dependencies
 ```bash
 pip install -e .
 ```
 
-### 4. Install external command‑line tools (most via pip)
+### 5. Install external command‑line tools (most via pip)
 
 All required tools can be installed with a single `pip install` command:
 
